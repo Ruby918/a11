@@ -1,0 +1,481 @@
+---
+title: "Analysis the Delays of TTC Buses in June 2021"
+author: "Dhanraj Patel"
+date: "2021-07-18"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+---
+# importing all nessessary libraries
+--- 
+```{r, echo=FALSE, include=FALSE} 
+
+library(opendatatoronto)
+library(tidyverse)
+library(janitor)
+library(skimr)
+library(visdat)
+qnorm()
+```
+
+## Overview 
+  The city of Toronto Prides itself on having one of the best public
+  transportation systems in all of the world. While riding on one of the cities
+  numerous TTC buses one is able to reach every corner of the City and 
+  while the city strives to keep their system running on a timely bases,
+  there are situations which cause a delay. Using the data provided by the
+  city of Toronto we will be analyzing the data of all the TTC bus delays that
+  occurred in June 2021. 
+
+
+## Data Collection Process
+
+Before delving deeper into the data it is important to understand the process of
+how the data was collected. Whenever a TTC bus delay occurs, the TTC (Toronto
+Transit Commission - the public agency in charge of transportation in Toronto)
+records the event in detail. The TTC makes sure to record the time and day
+of the delay, the route of the delayed bus, location of delay, 
+the amount of time the bus was delayed for and the cause of the delay.
+Due to the fact that the TTC is a public agency all the information they 
+record is then passed on to the city of Toronto who then publish it for 
+the public to view. The data is available on https://open.toronto.ca.
+
+
+
+---
+# Collecting the Data
+--- 
+
+
+```{r, echo=FALSE,include=FALSE}
+idoftheonewewant <- search_packages("delay")[1,'id']
+idoftheonewewant <- pull(idoftheonewewant,id)
+list_package_resources(idoftheonewewant)
+idofthedata <- pull(
+  list_package_resources(idoftheonewewant)[9,"id"],
+  id
+)
+thedata <- get_resource(idofthedata)[6][["June"]]
+thedata
+```
+
+
+## Cleaning of data
+
+
+```{r, echo=FALSE,include=FALSE}
+thedata <- clean_names(thedata)
+```
+
+```{r, echo=FALSE,include=FALSE}
+vis_dat(thedata)
+vis_miss(thedata)
+```
+
+
+
+```{r, echo=FALSE,include=FALSE}
+get_dupes(thedata)
+```
+
+```{r, echo=FALSE,include=FALSE}
+thedata <- thedata %>% distinct()
+get_dupes(thedata)
+```
+
+```{r, echo=FALSE}
+timedata <- select(thedata,time)
+B <- strptime("06:00", "%H:%M")
+C <- strptime("12:00", "%H:%M")
+D <- strptime("18:00", "%H:%M")
+E <- strptime("11:59", "%H:%M")
+time_intervals <- timedata %>%
+  mutate(time_interval = 
+          ifelse(difftime(strptime(time, "%H:%M"), B) < 0, "Morning",
+                 ifelse(difftime(strptime(time, "%H:%M"), C) < 0, "Afternoon",
+                        ifelse(difftime(strptime(time, "%H:%M"), D) < 0, "Evening",
+                               "Night"))))
+time_interval <- time_intervals$time_interval
+thedata <- mutate(thedata, time_interval) 
+               
+
+```
+
+After retrieving the data set it was important
+to clean the data so that the results generated would be an accurate reflection
+of the data. In order to clean the data it was first important to eliminate
+all the duplicate entries. Within the data set there were instances were
+the same delay was recorded multiple times. For the purposes of this analysis, 
+since we only want to include one recorded instance of all delays, all 
+the duplicates in the data set were removed.
+
+In addition, within the data set both of the columns of route and direction of 
+the recorded delayed bus contained missing values. As for the direction column about 10 percent 
+the values were missing and for route about 0.5 percent of the values were missing.
+Due to the fact that the values for route and direction were
+not used for the numerical or graphical summaries, the missing values for both
+columns were not removed as not not alter the accuracy of the data that would be
+caused by removing data.
+
+Lastly, since the delay times were recorded down to the minute, I introduced
+a new variable called time_interval. With this, I split up the time into 
+4 sections so incident delays can be analyzed by a factor of time intervals
+and not by the exact time. This is to avoid overly granular data. 
+
+
+## Important Variables
+
+Before looking at the numerical and graphical summaries it is important to 
+understand all the variables in the data set and what they represent.
+
+ * Date - The date that the TTC Bus delay occurred
+ * Route - The route the TTC bus was driving while it was delayed
+ * Time - The time that the TTC bus was delayed
+ * Day - The day of the week that the delay occurred
+ * Location - The intersection location of the TTC bus delay
+ * Min Delay - The time in minutes of the delay to the schedule for the
+ following bus
+ * Min Gap - The total time of delay in minutes
+ between the delayed bus and the bus before the delayed bus
+ * direction - The compass direction of the bus during the delay (e.g North)
+ * Vehicle - The unique identifier of the delayed bus
+ * Incident - The description of cause of the delay from the following: 
+      * Cleaning
+      * Collision - TTC 
+      * Diversion
+      * Emergency Services
+      * General Delay
+      * Held-by
+      * Investigation
+      * Late Entering Service
+      * Late Leaving Garage
+      * Management
+      * Utilized Off Route
+      * Vision
+      * Security
+      * Road Blocked - NON-TTC Collision
+      * Operations-Operator
+      * Mechanical
+ * Time interval - The time interval the delay occurred.  
+      * Morning: 00:00 to 06:00
+      * Afternoon: 00:60 to 12:00
+      * Evening: 12:00 to 18:00
+      * Night: 18:00 to 24:00
+
+```{r, echo=FALSE, include=FALSE} 
+thedata %>% 
+  group_by(incident) %>% 
+  summarize(mean_wind = mean(min_delay))
+
+
+Name_of_Variable <- c("Date","Route","Time","Day",
+                    "Location","Incident","Min Delay", "Min Gap", "direction",
+                    "Vehicle")
+Variable_Description <- c("The date the delay occured","The route the bus was
+                          driving","The time of the delay","Day of week of the
+                          delay",
+                    "The intersection at which the bus was delayed","The cause 
+                    of the dela (see table 2 for all causes of delayes below)",
+                    "Minutes of delay until the next bus to arrived", 
+                    "The time inbetween the the delayed bus and the previous
+                    bus", "The compass direction the bus was traveling",
+                    "Vehicle Identification number of delayed bus")
+df <- data.frame(Name_of_Variable,Variable_Description)
+
+knitr::kable(df, caption = "Before looking at the numerical and graphical summaries it is important to 
+understand all the variables in the data set and what they represent.")
+
+
+```
+
+\newpage
+## Numerical summeries
+
+
+With all the data cleaned, we can now move on analyzing important numerical summaries 
+to help us better understand the data set. Within our data set it is important
+to consider both the location and spread of our data to get a clear idea of
+how the variables are distributed.
+
+
+**Comparing the time of TTC delays to the days of the week**
+
+
+The following table (labeled Table_1) displays numerical summaries of the delays 
+that occurred in minutes for each day of the week.
+
+(Table_1)
+```{r, echo=FALSE} 
+
+days <- select(thedata, day)
+
+days2<- days %>%
+  mutate(days_num = ifelse(day == "Monday", 1,
+               ifelse(day == "Tuesday", 2,
+                      ifelse(day == "Wednesday", 3,
+                             ifelse(day == "Thursday", 4,
+                                    ifelse(day == "Friday", 5,
+                                           ifelse(day == "Saturday", 6,
+                                                  ifelse(day == "Sunday", 7,
+                                                         NA))))))))
+
+day_grouped <- thedata %>%
+  select(day, min_delay) %>%
+  group_by(day) %>%
+  summarize(Min = min(min_delay),
+  Q1 = quantile(min_delay, c(.25)),
+  Median = median(min_delay),
+  Q3 = quantile(min_delay, c(.75)),
+  Max = max(min_delay),
+  IQR = quantile(min_delay, c(.75))-quantile(min_delay, c(.25)),
+  Mean = round(mean(min_delay),2),
+  Trimmean_10 = round(mean(min_delay, trim = 0.1),2),
+  Var = round(var(min_delay)),
+  SD = round(sd(min_delay),2),
+  Range = max(min_delay)-min(min_delay))
+
+
+knitr::kable(day_grouped, caption = "The trimmed mean was trimmed by 10 percent")
+```
+
+
+
+Gathering information from the table we can see that for each day of the week
+the minutes of delays are right skewed. From the table we see that for each day 
+the spread of values from q3 to the min value is roughly a tenth of the number of values 
+from max to q3. From this we can surmise that the large majority of delays
+that occur on the TTC are very short lasting roughly about 10-15 minutes, but there
+are rare circumstances where there are delays that last much longer. The rare 
+long delays are influencing the mean of the time of the delays and also is the cause of the
+large amount of variance. Once you trim 10 percent of the mean, the trimmed mean of the
+delay time for each day of the week decreases. Since the data is right 
+skewed, the best numerical summary would be the median which states the the average 
+delay is around 10 minutes.
+
+
+
+\newpage
+**Comparing different causes to overall delay time**
+
+
+The following table (labeled Table_2) displays numerical summaries of the delays 
+that occurred in minutes for each cause of delay.
+
+
+
+(Table_2)
+```{r, echo=FALSE} 
+
+
+
+
+Cause_grouped <- thedata %>%
+  select(incident, min_delay) %>%
+  group_by(incident) %>%
+  summarize(
+  Count = n(),
+  Min = min(min_delay), 
+  Q1 = quantile(min_delay, c(.25)),
+  Median = median(min_delay),
+  Q3 = quantile(min_delay, c(.75)),
+  Max = max(min_delay), 
+  IQR = quantile(min_delay, c(.75))- quantile(min_delay, c(.25)), 
+  Mean = round(mean(min_delay), 2),
+  Trimmean = round(mean(min_delay, trim = 0.1),2), 
+  Var = round(var(min_delay)),
+  SD = round(sd(min_delay),2), 
+  Range = max(min_delay)-min(min_delay))
+  
+
+
+knitr::kable(Cause_grouped, caption = "The trimmed mean is trimmed by 10 percent")
+```
+
+
+While looking at this table of all the incident categories and the minutes of delay
+they caused, what immediately jumps out is that the incident Late Leaving Garage
+has a NA value for variance and SD. This is because in all of June 2021, 
+there was only one recorded instance of this cause of delay. With only one
+recorded data entry, it is not possible to find variance or SD so the table recorded it as
+NA. When comparing delays between different incident categories, it's important to
+take into account how many incidents each delay had, the number of incidents
+can significantly skew the data. The higher to count of the incident category, 
+the more confidence we can have in its numerical summary.
+
+While comparing all the incidents, we notice that general delays and diversions
+result in the longest delays. They have both the largest mean time and trimmed 
+mean time. In addition it is important to note that those two categories
+also have the greatest amount of variance, with each of its quartiles having
+a greater spread than any of the other categories. So while the average of of these
+2 delays has a large delay time, the delay times are spread out.
+
+Lastly, aside from a few categories of incidents we can see that most
+categories have a trimmed mean of roughly 20 minutes with a significant variance.
+This mirrors the data of the days of the week in the last section where we found
+that the data was right skewed.
+
+\newpage
+**Comparing the times at which the delays occurred**
+
+The following table (labeled Table_3) displays numerical summaries of the delays 
+that occurred for each time interval the delay occurred in.
+
+
+(Table_3)
+```{r, echo=FALSE} 
+
+
+
+
+interval_grouped <- thedata %>%
+  select(time_interval, min_delay) %>%
+  group_by(time_interval) %>%
+  summarize(
+  Count = n(),
+  Min = min(min_delay), 
+  Q1 = quantile(min_delay, c(.25)),
+  Median = median(min_delay),
+  Q3 = quantile(min_delay, c(.75)),
+  Max = max(min_delay), 
+  IQR = quantile(min_delay, c(.75))- quantile(min_delay, c(.25)), 
+  Mean = round(mean(min_delay), 2),
+  Trimmean = round(mean(min_delay, trim = 0.1),2), 
+  Var = round(var(min_delay)),
+  SD = round(sd(min_delay),2), 
+  Range = max(min_delay)-min(min_delay))
+  
+
+
+knitr::kable(interval_grouped, caption = "The trimmed mean is trimmed by 10 percent")
+```
+
+From the table above we are able to see that identically to the previous 
+two tables, the delayed time for all intervals
+are right skewed. The majority of the delays only last a few minutes
+while on rare occasions, there are delays that last much longer.
+We know this from the fact that in all time intervals, the spread of values from
+q3 to the min value is significantly smaller than the spread from the max value to q3.
+
+Comparing individual times of day we see that the morning has the largest mean 
+time. Although once you apply a trimmed mean the gap between the mean for the morning
+and the rest of the interval gets smaller. From this we can infer that the morning
+time have a large amount of variance in their delay times, this is reinforced as we see that 
+the variance for the morning is greater than all the other intervals. It is also
+important to note that the number of incidents that occur in the morning
+are fewer than the rest of the intervals. This can explain the greater variance
+of the morning interval. 
+
+\newpage
+## Graphical summaries
+
+
+Aside from numerical table summaries it is important to see graphical 
+summaries to see trends in the data. 
+
+
+(Graph_1)
+
+Comparing delays between time of day, day of week and category of incident
+
+```{r, echo=FALSE, include=FALSE}
+grouped_incident_data <- thedata %>%
+  select(day, incident, time_interval) %>%
+  group_by(day, incident, time_interval) %>%
+  summarize(count = n())
+
+
+Final_grapgh <-grouped_incident_data %>%
+ggplot(aes(x= day, y=count, fill=incident)) + geom_bar(stat="identity")+
+scale_x_discrete(guide = guide_axis(n.dodge=7))+
+ggtitle("Number of delays per time intervals 
+        (seperated by incident category)") +
+xlab("Days of week") +
+ylab("Number of delays")+
+facet_grid(~time_interval)
+Final_grapgh
+
+```
+
+```{r, echo=FALSE}
+
+Final_grapgh
+
+```
+
+
+
+In this graph we can see the number of delays for every day of the week separated by time of day. 
+Within the count of delay incidents we can also the causes of the delays for that day.
+
+Reminder:
+      Morning: 00:00 to 06:00
+      Afternoon: 06:00 to 12:00
+      Evening: 12:00 to 18:00
+      Night: 18:00 to 24:00
+
+At a quick glance of graph_1 we can infer that the afternoon and evening have the 
+highest amount of delays, while the morning has the smallest amount of delays.
+In addition we can see that in all intervals other than morning, cleaning 
+and mechanical delays are noticeably the largest causes of delays. In contrast, in the 
+morning the causes are more evenly distributed. Also, when comparing the number of 
+delays between the time interval and day of the week we see for all time intervals
+the two days of the week that have the highest amount of delays are Tuesday and Wednesday.
+Lastly, for mornings it seems that all days of the week have a roughly
+even amount of delays, where as for the rest of the time intervals
+it's is more varied.
+
+
+
+
+\newpage
+(Graph_2)
+
+From graph_2 we are able to see the spread of minutes in delays for every day of the week
+separated by their quartiles. 
+
+
+
+```{r, echo=FALSE}
+grouped_minutes_delayed <- thedata %>%
+  select(day, min_delay) %>%
+  group_by(day,min_delay)
+  
+
+plot_final <- grouped_minutes_delayed %>% 
+  ggplot(aes(y=min_delay)) +
+  scale_x_discrete(guide = guide_axis(n.dodge=5))+
+  ggtitle("Comparing minutes delayed for every day of week using box plot") +
+  xlab("Days of week") +
+  ylab("Minutes in delay")+
+  geom_boxplot()+ 
+  facet_grid(~day)
+plot_final 
+
+```
+
+From graph_2 we can see that for all days of the week, the data of minutes of delays is right skewed,
+most of the data is concentrated near the bottom, meaning most of the delays are only a few minutes long.
+However the inclusion of significant outliers of really lengthy delays skews 
+the data. From this skew it makes it look like the average delay is much higher than it really is
+and impacts the variance greatly. 
+
+
+## Resources
+
+This entire document and all its contents were made by using the 
+programming language R and Rstudio.
+From pulling the data, to cleaning the data, manipulating the data
+and creating tables and graphs, was all done using R and Rstudio. 
+
+
+
